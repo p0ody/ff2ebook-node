@@ -1,17 +1,28 @@
 import Fastify from "fastify";
-import exist from "../endpoints/exist"
-import fetch from "../endpoints/fetch"
 import Config from "./_Config";
 import * as db from "./db/DBHandler";
+import * as ScraperMgr from "./ScraperMgr";
+import importEndpoints from "./endpoints/importEndpoints";
 
-const server = Fastify({ logger: false });
+const server = Fastify({ logger: false, ignoreTrailingSlash: true });
+importEndpoints(server);
 
-server.register(exist, fetch);
+server.after((err) => {
+	if (err) {
+		console.error(err);
+	};
+})
 
 try {
 	db.init().then(async () => {
 		await server.listen(Config.App.listenPort);
 		console.info("Listening on port %i...", Config.App.listenPort);
+		ScraperMgr.testScrapers();
+		setInterval(() => {
+			ScraperMgr.testScrapers();
+			
+		}, Config.Scraper.testIntervalSecs * 1000);
+		
 	})
 	.catch((err) => { throw err; });
 } catch (err) {

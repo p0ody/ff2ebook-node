@@ -1,4 +1,4 @@
-import { Sequelize, Model, DataTypes, InferAttributes, InferCreationAttributes } from 'sequelize';
+import { Model, DataTypes, InferAttributes, InferCreationAttributes } from 'sequelize';
 
 export default class FicArchive extends Model<InferAttributes<FicArchive>, InferCreationAttributes<FicArchive>> {
 	declare id: number;

@@ -1,13 +1,15 @@
 import { BaseSite} from "./BaseSite";
 import { UrlTypeRequired } from "../GlobalEnums";
 import * as SourceFetcher from "../SourceFetcher";
-import Parser, { HTMLElement } from "node-html-parser";
+import * as Cheerio from "cheerio";
 import { Warning, FatalError } from "../ErrorTypes";
-import { parse } from "path";
+import Chapter from "../Chapter";
+import * as FanficSite from "../FanficSites";
 
 export default class extends BaseSite {
-	baseUrl = "https://www.fanfiction.net";
-	
+	_site = FanficSite.Sites.FFNET;
+	_baseUrl = "https://www."+ this.domain;
+
 
 	getUrl(urlRequired?: UrlTypeRequired, chapNum: number = 1): string {
 		switch(urlRequired) {
@@ -25,137 +27,178 @@ export default class extends BaseSite {
 		}
 	}
 
-	async getPageSource(chapNum: number = 0): Promise<string | null> {
+	async getPageSource(chapNum: number = 0, lightVersion: boolean = false): Promise<string | null> {
 		if (this.chapterSource[chapNum]) {
 			return this.chapterSource[chapNum];
 		}
 
+		let lookupChapNum = chapNum;
+
 		if (chapNum === 0 ) {
-			chapNum = 1;
+			lookupChapNum = 1;
 		}
-		const source = await SourceFetcher.useScraper(this.getUrl(UrlTypeRequired.chapter, chapNum));
+
+		let url = this.getUrl(UrlTypeRequired.chapter, lookupChapNum);
+		if (lightVersion) {
+			url = url.replace("www", "m");
+		}
+		const source = await SourceFetcher.useScraper(url);
 
 		if (!source) {
 			throw new FatalError("Couldn't fetch source.");
 		}
 
 		this.chapterSource[chapNum] = source;
-		this.parsedSource[chapNum] = Parser(source);
+		this.parsedSource[chapNum] = Cheerio.load(source);
 		return source;
 	}
 
-	protected findTitle(parsedSource: HTMLElement): string {
-		const title = parsedSource.querySelector("b.xcontrast_txt");
-		if (!title) {
+	protected findTitle(parsedSource: Cheerio.CheerioAPI): string {
+		const title = parsedSource("b.xcontrast_txt");
+		if (title.length === 0) {
 			throw new FatalError("Couldn't find title.");
 		}
 
-		this.title = title.innerText;
-		return title.innerText;
+		this.title = title.text();
+		return title.text();
 	}
 
-	protected findAuthor(parsedSource: HTMLElement): { authorName: string, authorId: number } {
-		const author = parsedSource.querySelector("#profile_top > a[href*=/u/]");
-		if (!author) {
+	protected findAuthor(parsedSource: Cheerio.CheerioAPI): { authorName: string, authorId: number } {
+		const author = parsedSource("#profile_top > a[href*=/u/]");
+		if (author.length === 0) {
 			throw new FatalError("Couldn't find author information");
 		}
 
 
-		this.authorName = author.innerText;
+		this.authorName = author.text();
 		const regex = /\/u\/([0-9]+)/si;
-		this.authorId = parseInt(regex.exec(author.attributes.href)[1]);
+		this.authorId = parseInt(regex.exec(author.attr("href"))[1]);
 		return { authorName: this.authorName, authorId: this.authorId };
 	}
 
-	protected findFicType(parsedSource: HTMLElement): string {
-		const ficType = parsedSource.querySelector("#pre_story_links > span.lc-left");
-		if (!ficType) {
-			throw new Warning("Couldn't find fic type.");
+	protected findFicType(parsedSource: Cheerio.CheerioAPI): string {
+		const ficType = parsedSource("#pre_story_links > span.lc-left");
+		if (ficType.length === 0) {
+			this.addWarning("Couldn't find fic type.");
 		}
 
-		this.ficType = ficType.innerText;
-		return ficType.innerText;
+		this.ficType = ficType.text();
+		return ficType.text();
 	}
 
-	protected findSummary(parsedSource: HTMLElement): string {
-		const summary = parsedSource.querySelector("#profile_top > div.xcontrast_txt");
-		if (!summary) {
-			throw new Warning("Couldn't find summary.");
+	protected findSummary(parsedSource: Cheerio.CheerioAPI): string {
+		const summary = parsedSource("#profile_top > div.xcontrast_txt");
+		if (summary.length === 0) {
+			this.addWarning("Couldn't find summary.");
 		}
 		
-		this.summary = summary.innerText;
-		return summary.innerText;
+		this.summary = summary.text();
+		return summary.text();
 	}
 
-	protected findDates(parsedSource: HTMLElement): { published: number, updated: number } {
-		const selected = parsedSource.querySelectorAll("#profile_top > span > span[data-xutime]");
+	protected findDates(parsedSource: Cheerio.CheerioAPI): { published: number, updated: number } {
+		const selected = parsedSource("#profile_top > span > span[data-xutime]");
 		//const updated = parsedSource.querySelector("#profile_top > div.xcontrast_txt");
 
-		if (!selected) {
+		if (selected.length === 0) {
 			throw new FatalError("Couldn't find published date.");
 		}
 
-		this.publishedDate = parseInt(selected[0].attributes["data-xutime"]);
-		this.updatedDate = selected[1] ? parseInt(selected[1].attributes["data-xutime"]) : this.publishedDate; // If updated time is not available, use published time.
+		// if more than on element is found.
+		if (selected.length > 1) {
+			this.publishedDate = parseInt(selected.eq(1).attr("data-xutime")); // Second element found id published date
+			this.updatedDate = parseInt(selected.eq(0).attr("data-xutime")); // First element is updated date
+		}
+		else { // If updated time is not available, use published time.
+			const date = parseInt(selected.attr("data-xutime"));
+			this.publishedDate = date;
+			this.updatedDate = date;
+		}
 		
 		return { published: this.publishedDate, updated: this.updatedDate };
 	}
 
-	protected findWordsCount(parsedSource: HTMLElement): number {
-		const selected = parsedSource.querySelector("#profile_top > span.xgray");
+	protected findWordsCount(parsedSource: Cheerio.CheerioAPI): number {
+		const selected = parsedSource("#profile_top > span.xgray");
 
-		if (!selected) {
-			throw new Warning("Couldn't find words count.");
+		if (selected.length === 0) {
+			this.addWarning("Couldn't find words count.");
 		}
 
 		const regex = /Words: (.+?) -/si;
-		const result = regex.exec(selected.innerText);
+		const result = regex.exec(selected.text());
 		if (!result) {
-			throw new Warning("Couldn't find words count.");
+			this.addWarning("Couldn't find words count.");
 		}
 		const count = parseInt(result[1].replace(",", ""));
 		this.wordsCount = count;
 		return count;
 	}
 
-	protected findChapCount(parsedSource: HTMLElement): number {
-		const selected = parsedSource.getElementById("chap_select");
+	protected findChapCount(parsedSource: Cheerio.CheerioAPI): number {
+		const selected = parsedSource("#chap_select").eq(0);
 		let count = 1; // If we dont find the chapter selection, assume it has only one chapter.
-		if (selected) {
-			count = selected.childNodes.length;
+		if (selected.length > 0) {
+			count = selected.children().length;
 		}
 
 		this.chapCount = count;
 		return count;
 	}
 
-	protected findIsCompleted(parsedSource: HTMLElement): boolean {
-		const selected = parsedSource.querySelector("#profile_top > span.xgray");
+	protected findIsCompleted(parsedSource: Cheerio.CheerioAPI): boolean {
+		const selected = parsedSource("#profile_top > span.xgray");
 
-		if (!selected) {
+		if (selected.length === 0) {
 			return false;
 		}
 
-		this.isCompleted = selected.innerText.includes("Status: Complete");
+		this.isCompleted = selected.text().includes("Status: Complete");
 		return this.isCompleted;
 	}
 
 	/** Additionals information such as character or pairing */
-	protected findAddInfos(parsedSource: HTMLElement): string {
-		const selected = parsedSource.querySelector("#profile_top > span.xgray");
+	protected findAddInfos(parsedSource: Cheerio.CheerioAPI): string {
+		const selected = parsedSource("#profile_top > span.xgray");
 
-		if (!selected) {
+		if (selected.length === 0) {
 			return null;
 		}
-		
+
 		// ex:		Fiction M - English - Horror/Supernatural - Harry P. - Chapters: 10
 		const regex = /.+?-.+?- (.+?) - (?:Chapters|Words)/si;
-		let infos = regex.exec(selected.innerText);
+		let infos = regex.exec(selected.text());
 		if (infos) {
 			this.addInfos = infos[1];
 			return infos[1];
 		}
 
 		return null;
+	}
+
+	protected findChapterData(chapNum:number, parsedSource: Cheerio.CheerioAPI): Chapter {
+		const titleElement = parsedSource("#content");
+
+		if (titleElement.length === 0) {
+			throw new FatalError("Couldn't find chapter data.");
+		}
+
+		const titleRegex = /Chapter [0-9]+(?:\: )*(.*)/si
+		const result = titleRegex.exec(titleElement.text());
+
+		let chapTitle = null;
+		if (!result || result[1].length === 0) {
+			this.addWarning("Couldn't find chapter #"+ chapNum +" title.");
+		}
+		else {
+			chapTitle = result[1];
+		}
+
+		if (!chapTitle) { // If no title found, create a generic chapter name
+			chapTitle = `Chapter ${chapNum}`;
+		}
+
+		const text = parsedSource("#storycontent");
+		return { num: chapNum, title: chapTitle, text: text.html() };
 	}
 }

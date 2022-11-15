@@ -1,15 +1,18 @@
-import { FanficHandler, FanficSite } from "../FanficHandler";
+import FanficHandler from "../FanficHandler";
 import { UrlTypeRequired } from "../GlobalEnums";
-import Parser, { HTMLElement } from "node-html-parser";
+import * as Cheerio from "cheerio";
 import { Warning, FatalError } from "../ErrorTypes";
-import { parse } from "path";
-import { throws } from "assert";
+import Chapter from "../Chapter";
+import QueueMgr from "../QueueMgr";
+import * as FanficSite from "../FanficSites";
+import Config from "../_Config";
 
 export abstract class BaseSite {
-	protected _site: FanficSite;
+	protected _baseUrl: string
+	protected _site: FanficSite.Sites;
 	protected _id: number;
 	protected _uuid: string;
-	protected _title?: string = null;
+	protected _title: string;
 	protected _author?: string = null;
 	protected _authorId?: number = null;
 	protected _ficType?: string = null;
@@ -20,47 +23,67 @@ export abstract class BaseSite {
 	protected _chapCount: number = 1;
 	protected _isComplete?: boolean = null;
 	protected _addInfos?: string = null;
-	protected _baseUrl: string;
+	protected _warnings: Warning[] = new Array();
 
 	protected chapterSource: string[] = new Array();
-	protected parsedSource: HTMLElement[] = new Array();
+	protected parsedSource: Cheerio.CheerioAPI[] = new Array();
+	protected _chapters: Chapter[] = new Array();
 
 
 	constructor(handler: FanficHandler) {
-		this._site = handler.getSite;
-		this._id = handler.getId;
-		this._uuid = handler.getUUID;
+		this._id = handler.id;
+		this._uuid = handler.UUID;
 	}
 
 	public abstract getUrl(urlRequired?: UrlTypeRequired, chapNum?: number): string;
 
-	public abstract getPageSource(chapNum: number): Promise<string | null>; // chapNum = 0 is considered to be the title page
-	public async getParsedPageSource(chapNum: number): Promise<HTMLElement | null> {
+	public abstract getPageSource(chapNum: number, lightVersion: boolean): Promise<string | null>; // chapNum = 0 is considered to be the title page
+	public async getParsedPageSource(chapNum: number, lightVersion: boolean): Promise<Cheerio.CheerioAPI | null> {
 		if (this.parsedSource[chapNum]) {
 			return this.parsedSource[chapNum];
 		}
 
 		if (this.chapterSource[chapNum]) {
-			return Parser(this.chapterSource[chapNum]);
+			this.parsedSource[chapNum] = Cheerio.load(this.chapterSource[chapNum]);
+			return this.parsedSource[chapNum];
 		}
 
-		const source = await this.getPageSource(chapNum);
-		this.parsedSource[chapNum] = Parser(source);
+		const source = await this.getPageSource(chapNum, lightVersion);
+		this.parsedSource[chapNum] = Cheerio.load(source);
+
+		if (!this.parsedSource[chapNum]) {
+			throw new FatalError("Couldn't parse html for chapter #"+ chapNum);
+		}
 		return this.parsedSource[chapNum];
 	};
+
+	protected async getChapters() {
+		// Adding a queue so it doesn't just flood the scraper with like 800 request at the same time preventing other request being processed.
+		const queue = new QueueMgr(Config.Scraper.maxAsync, 20000, 500);
+		for (let i = 1; i <= this.chapCount; i++) {
+			queue.push(async (index: number) => {   
+				const element = await this.getParsedPageSource(index, true)
+				this.chapters[index] = this.findChapterData(index, element);
+			}, i);
+		}
+	}
 	
-	protected abstract findTitle(parsedSource: HTMLElement): string;
-	protected abstract findAuthor(parsedSource: HTMLElement): { authorName: string, authorId: number };
-	protected abstract findFicType(parsedSource: HTMLElement): string;
-	protected abstract findSummary(parsedSource: HTMLElement): string;
-	protected abstract findDates(parsedSource: HTMLElement): { published: number, updated: number };
-	protected abstract findWordsCount(parsedSource: HTMLElement): number;
-	protected abstract findChapCount(parsedSource: HTMLElement): number;
-	protected abstract findIsCompleted(parsedSource: HTMLElement): boolean;
-	protected abstract findAddInfos(parsedSource: HTMLElement): string;
+	// Step 1
+	protected abstract findTitle(parsedSource: Cheerio.CheerioAPI): string;
+	protected abstract findAuthor(parsedSource: Cheerio.CheerioAPI): { authorName: string, authorId: number };
+	protected abstract findFicType(parsedSource: Cheerio.CheerioAPI): string;
+	protected abstract findSummary(parsedSource: Cheerio.CheerioAPI): string;
+	protected abstract findDates(parsedSource: Cheerio.CheerioAPI): { published: number, updated: number };
+	protected abstract findWordsCount(parsedSource: Cheerio.CheerioAPI): number;
+	protected abstract findChapCount(parsedSource: Cheerio.CheerioAPI): number;
+	protected abstract findIsCompleted(parsedSource: Cheerio.CheerioAPI): boolean;
+	protected abstract findAddInfos(parsedSource: Cheerio.CheerioAPI): string;
+
+	// Step 2
+	protected abstract findChapterData(chapNum: number, parsedSource: Cheerio.CheerioAPI): Chapter;
 
 	public async populateData(): Promise<void> {
-		const parsedSource = await this.getParsedPageSource(0);
+		const parsedSource = await this.getParsedPageSource(0, false);
 
 		if (!parsedSource) {
 			throw new FatalError("Couldn't fetch source pour title page.");
@@ -74,16 +97,34 @@ export abstract class BaseSite {
 		this.findWordsCount(parsedSource);
 		this.findChapCount(parsedSource);
 		this.findIsCompleted(parsedSource);
-		this.findAddInfos(parsedSource))
+		this.findAddInfos(parsedSource);
+
+		this.getChapters();
+	}
+
+	public addWarning(warnText: string) {
+		this._warnings.push(new Warning(warnText));
 	}
 
 	// Getters
+	get domain() {
+		return FanficSite.getDomain(this.site);
+	}
+
+	get baseUrl() {
+		return this._baseUrl;
+	}
+
 	get site() {
 		return this._site;
 	}
 
 	get id() {
 		return this._id;
+	}
+
+	get uuid() {
+		return this._uuid;
 	}
 
 	get title() {
@@ -130,9 +171,26 @@ export abstract class BaseSite {
 		return this._addInfos;
 	}
 
+	get getProgress() {
+		const current = this.chapters.length;
+		return current > 0 ? current - 1 : current;
+	}
+
+	get warnings() {
+		return this._warnings;
+	}
+
+	get chapters() {
+		return this._chapters;
+	}
+
+	getChapter(num: number) {
+		return this.chapters[num];
+	}
 
 	// Setters
-	set site(site: FanficSite) {
+
+	set site(site: FanficSite.Sites) {
 		this._site = site;
 	}
 
