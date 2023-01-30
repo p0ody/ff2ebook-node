@@ -180,7 +180,7 @@ export default class extends BaseSite {
 		const titleElement = parsedSource("#content");
 
 		if (titleElement.length === 0) {
-			throw new FatalError("Couldn't find chapter data.");
+			throw new FatalError(`Couldn't find chapter #${chapNum} data.`);
 		}
 
 		const titleRegex = /Chapter [0-9]+(?:\: )*(.*)/si

@@ -5,6 +5,10 @@ import * as ScraperMgr from "./ScraperMgr";
 import importEndpoints from "./endpoints/importEndpoints";
 
 const server = Fastify({ logger: false, ignoreTrailingSlash: true });
+server.register(require("fastify-cors"), { 
+	methods: ['GET', 'POST'],
+	origin: true 
+});
 importEndpoints(server);
 
 server.after((err) => {
@@ -17,7 +21,7 @@ try {
 	db.init().then(async () => {
 		await server.listen(Config.App.listenPort);
 		console.info("Listening on port %i...", Config.App.listenPort);
-		ScraperMgr.testScrapers();
+		await ScraperMgr.testScrapers();
 		setInterval(() => {
 			ScraperMgr.testScrapers();
 			

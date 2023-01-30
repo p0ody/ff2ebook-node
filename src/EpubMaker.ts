@@ -10,19 +10,6 @@ import { Log } from "./Utils";
 import { EOL } from "os";
 import * as Utils from "./Utils";
 
-
-//const EPUB_TEMPLATE = loadTemplate(Config.Epub.templatePath);
-
-/* const CHAPTER_TEMPLATE = FileSystem.readFile(__dirname + "/../files/chapter.xhtml")
-	.then((buffer) => {
-		console.log("chapter.xhtml loaded in memory.");
-		return buffer.toString;
-	}).catch((err: Error) => {
-		throw new Error("FileSystem: " + err.message);
-	});
- */
-
-
 export async function create(fic: BaseSite) {
 	const filename = `${fic.site}_${fic.id}_${fic.updatedDate}.epub`;
 	const tempFile = `${Config.App.ficTempDir}/${filename}`;
@@ -41,8 +28,16 @@ export async function create(fic: BaseSite) {
 		createChapters(fic, epub),
 		updateManifest(fic, epub),
 		updateTOC(fic, epub),
-	]).then(() => {
+	]).then(async () => {
 		epub.writeZip(tempFile);
+
+		const archiveFile = `${Config.App.ficArchiveDir}/${filename}`;
+		if (fs.existsSync(archiveFile)) {
+			Log.info("File exist in archive, deleting");
+			fs.rmSync(archiveFile);
+		}
+		fs.cpSync(tempFile, archiveFile);
+		await FileSystem.rm(tempFile, { force: true });
 	}).catch(err => {
 		throw new FatalError(err);
 	})
@@ -90,6 +85,10 @@ async function copyTemplate(newFile: string) {
 
 
 async function updateTitlePage(fic: BaseSite, epub: Zip): Promise<void> {
+	if (!fic) {
+		throw new Error("fic data not found.");
+	}
+
 	const titlePagePath = "OEBPS/Content/title.xhtml";
 	const titlePage = epub.getEntry(titlePagePath);
 
@@ -133,6 +132,9 @@ async function createChapters(fic: BaseSite, epub: Zip): Promise<void> {
 		throw new Error("Couldn't parse chapter page.");
 	}
 	for (let i = 1; i <= fic.chapCount; i++) {
+		if (!fic.getChapter(i)) {
+			throw new Error("No chapter found for chapter #"+ i);
+		}
 		$("title").text(fic.getChapter(i).title);
 		$("#chap-title").text(`${fic.getChapter(i).num}. ${fic.getChapter(i).title}`);
 		$("#chap-text").html(Utils.closeHtmlTags(fic.getChapter(i).text));
@@ -229,8 +231,3 @@ function updateText(parsedHtml: Cheerio.CheerioAPI, selector: string, value: any
 	return $;
 }
 
-interface DirElement {
-	path: string;
-	isDir: boolean;
-	child?: DirElement[];
-}

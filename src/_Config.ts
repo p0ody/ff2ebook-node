@@ -14,12 +14,12 @@ export default {
 	},
 	Scraper: {
 		urls: [
-			"http://localhost:3000/?url=",
-			"http://192.168.1.250:3000/?url="
+			,
 		],
-		maxRetry: 5,
-		maxAsync: 50, // 50 for testing speed
-		testIntervalSecs: 60,
+		maxRetry: 3,
+		timeoutMS: 30000,
+		maxAsync: 20,
+		testIntervalSecs: 35,
 	},
 	Epub: {
 		templatePath: "./files/template.epub",

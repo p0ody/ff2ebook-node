@@ -28,6 +28,7 @@ export abstract class BaseSite {
 	protected chapterSource: string[] = new Array();
 	protected parsedSource: Cheerio.CheerioAPI[] = new Array();
 	protected _chapters: Chapter[] = new Array();
+	protected _progress: number = 0;
 
 
 	constructor(handler: FanficHandler) {
@@ -59,10 +60,14 @@ export abstract class BaseSite {
 
 	protected async getChapters() {
 		// Adding a queue so it doesn't just flood the scraper with like 800 request at the same time preventing other request being processed.
-		const queue = new QueueMgr(Config.Scraper.maxAsync, 20000, 500);
+		const queue = new QueueMgr(Config.Scraper.maxAsync, 120000, 300);
 		for (let i = 1; i <= this.chapCount; i++) {
 			queue.push(async (index: number) => {   
 				const element = await this.getParsedPageSource(index, true)
+				if (!element) {
+					throw new FatalError("No parsed source.");
+				}
+				this._progress++;
 				this.chapters[index] = this.findChapterData(index, element);
 			}, i);
 		}
@@ -172,8 +177,7 @@ export abstract class BaseSite {
 	}
 
 	get getProgress() {
-		const current = this.chapters.length;
-		return current > 0 ? current - 1 : current;
+		return this._progress;
 	}
 
 	get warnings() {

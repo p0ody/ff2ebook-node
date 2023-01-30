@@ -35,7 +35,8 @@
     "adm-zip": "^0.5.9",
     "axios": "^0.27.2",
     "cheerio": "^1.0.0-rc.11",
-    "fastify": "^3.24.1",
+    "fastify": "^3.29.5",
+    "fastify-cors": "^6.1.0",
     "mysql2": "^2.3.3",
     "sequelize": "^6.19.0",
     "sequelize-typescript": "^2.1.3"

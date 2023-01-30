@@ -1,5 +1,6 @@
 import Config from "../src/_Config";
 import * as db from "../src/db/DBHandler";
+import * as ScraperMgr from "../src/ScraperMgr";
 import { exit } from "process";
 
 import * as Exist from "../src/endpoints/exist";
@@ -10,13 +11,16 @@ import * as CreateEpub from "../src/endpoints/createEpub";
 
 const TEST_FIC = { 
 	site: "ffnet",
-	id: 8215565,
+	id: 14139690,
 };
 
 
 try {
 	db.init().then(async () => {
 		console.log("Connected to DB.");
+
+		// Testing scrapers listed
+		await ScraperMgr.testScrapers();
 
 		console.info("Testing /exist/ endpoint");
 		await Exist.ficExist(TEST_FIC).then((result) => {

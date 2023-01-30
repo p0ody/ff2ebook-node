@@ -24,6 +24,12 @@ export async function handler(request: FastifyRequest) {
 	return await ficExist(params);
 }
 
+export async function postHandler(request: FastifyRequest) {
+	console.log("Received POST");
+	console.log(request.query);
+	return { test: "lol" };
+}
+
 export async function ficExist(params: Params) {
 	const result = await db.models.FicArchive.findOne({
 		where: {
@@ -42,6 +48,7 @@ export async function ficExist(params: Params) {
 
 export default function (router:FastifyInstance, opts: any, next: Function) {
 	router.get("/exist/:site/:id", handler);
+	router.post("/exist/", postHandler);
 
 	next();
 } 
