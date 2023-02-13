@@ -13,6 +13,8 @@ export async function init() {
 	pool = new Sequelize({ dialect: "mysql", pool: { min: 0, max: 5, idle: 30000 }, ...Config.DB });
 	await pool.authenticate();
 	initModels();
+
+	pool.sync();
 	return pool;
 }
 
