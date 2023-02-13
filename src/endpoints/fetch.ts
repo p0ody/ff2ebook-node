@@ -3,40 +3,50 @@ import FanficHandler from "../FanficHandler";
 import * as FanficSite from "../FanficSites";
 import * as Utils from "../Utils";
 import * as RequestMgr from "../RequestMgr";
+import { ErrorType, errorGenerator, FrontendError } from "../FrontendInterface";
 
 interface Params {
 	site: string;
 	id: number;
 }
 
-interface Return {
+interface Response {
 	uuid?: string;
 	ficId?: number;
-	error?: string;
+	errors?: FrontendError[];
 }
 
 
-async function handler(request: FastifyRequest, reply: FastifyReply) {
+async function handler(request: FastifyRequest, reply: FastifyReply): Promise<Response> {
 	const params = request.params as Params;
 
 	if (!Utils.enumContains(params.site, FanficSite.Sites)) {
-		return { error: "Invalid site." };
+		return { errors: [errorGenerator(ErrorType.critical, "Invalid site.")] };
 	}
 
 	if (!params.id) {
-		return { error: "No id provided." };
+		return { 
+			errors: [errorGenerator(ErrorType.critical, "No id provided.")]
+		};
 	}
 
 	return await fetch(params);
 }
 
-export async function fetch(params: Params): Promise<Return> {
+export async function fetch(params: Params): Promise<Response> {
 	const handler = new FanficHandler(params.site as FanficSite.Sites, params.id);
 	if (!handler) {
-		return { error: "Unknown error." };
+		return { 
+			errors: [errorGenerator(ErrorType.critical, "Unknown error.")] 
+		};
 	}
 	RequestMgr.addRequest(handler);
-	handler.fetchFic();
+	handler.fetchFic().catch((err) => {
+		console.log(err);
+		if (err instanceof Error) {
+			handler.siteHandler.addError(err);
+		}
+	});
 
 	const toSend = {
 		uuid: handler.UUID,

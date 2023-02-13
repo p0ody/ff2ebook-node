@@ -1,4 +1,4 @@
-import { Sequelize, Model, DataTypes, InferAttributes, InferCreationAttributes, ModelStatic, Attributes } from 'sequelize';
+import { Sequelize } from 'sequelize';
 import Config from "../_Config";
 
 import FicArchive from "./models/FicArchive";

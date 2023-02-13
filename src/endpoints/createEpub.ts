@@ -1,21 +1,23 @@
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from "fastify";
-import * as Utils from "../Utils";
 import * as RequestMgr from "../RequestMgr";
 import * as EpubMaker from "../EpubMaker";
+import { ErrorType, errorGenerator, FrontendError } from "../FrontendInterface";
+import Config from "../_Config";
 
 export interface Params {
-	uuid: string;
+	uuid: string,
+	mobi: boolean
 }
 
 export interface Return {
-	error?: string,
+	errors?: FrontendError[],
 	filename?: string,
 }
 
 async function handler(request: FastifyRequest, reply: FastifyReply) {
 	const params = request.params as Params;
 
-	createEpub(params.uuid);
+	return createEpub(params.uuid);
 }
 
 export async function createEpub(uuid: string): Promise<Return> {
@@ -23,13 +25,12 @@ export async function createEpub(uuid: string): Promise<Return> {
 
 	try {
 		const filename = await EpubMaker.create(req.handler.siteHandler);
-
-		return { filename: filename };
+		return { filename: `${ Config.App.ficArchiveDir }/${ filename }` };
 
 	} catch(err) {
 
 		if (err instanceof Error) {
-			return { error: err.message };
+			return { errors: [errorGenerator(ErrorType.critical, err.message)] };
 		}
 	}
 }

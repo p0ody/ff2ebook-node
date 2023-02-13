@@ -1,11 +1,11 @@
 import FanficHandler from "../FanficHandler";
 import { UrlTypeRequired } from "../GlobalEnums";
 import * as Cheerio from "cheerio";
-import { Warning, FatalError } from "../ErrorTypes";
 import Chapter from "../Chapter";
 import QueueMgr from "../QueueMgr";
 import * as FanficSite from "../FanficSites";
 import Config from "../_Config";
+import Warning from "../Warning"
 
 export abstract class BaseSite {
 	protected _baseUrl: string
@@ -23,17 +23,20 @@ export abstract class BaseSite {
 	protected _chapCount: number = 1;
 	protected _isComplete?: boolean = null;
 	protected _addInfos?: string = null;
-	protected _warnings: Warning[] = new Array();
+	protected _warnings: Warning[]  = [];
+	protected _errors: Error[] = [];
 
-	protected chapterSource: string[] = new Array();
-	protected parsedSource: Cheerio.CheerioAPI[] = new Array();
-	protected _chapters: Chapter[] = new Array();
+	protected chapterSource: string[] = [];
+	protected parsedSource: Cheerio.CheerioAPI[] = [];
+	protected _chapters: Chapter[] = [];
 	protected _progress: number = 0;
+	protected _queue: QueueMgr;
 
 
 	constructor(handler: FanficHandler) {
 		this._id = handler.id;
 		this._uuid = handler.UUID;
+		this._queue = new QueueMgr(Config.Scraper.maxAsync, (Config.Scraper.timeoutMS * Config.Scraper.maxRetry)*1.5, 300);
 	}
 
 	public abstract getUrl(urlRequired?: UrlTypeRequired, chapNum?: number): string;
@@ -53,25 +56,28 @@ export abstract class BaseSite {
 		this.parsedSource[chapNum] = Cheerio.load(source);
 
 		if (!this.parsedSource[chapNum]) {
-			throw new FatalError("Couldn't parse html for chapter #"+ chapNum);
+			throw new Error("Couldn't parse html for chapter #"+ chapNum);
 		}
 		return this.parsedSource[chapNum];
 	};
 
 	protected async getChapters() {
 		// Adding a queue so it doesn't just flood the scraper with like 800 request at the same time preventing other request being processed.
-		const queue = new QueueMgr(Config.Scraper.maxAsync, 120000, 300);
 		for (let i = 1; i <= this.chapCount; i++) {
-			queue.push(async (index: number) => {   
+			if (this.chapters[i]) {
+				continue;
+			}
+			this._queue.push(async (index: number) => {   
 				const element = await this.getParsedPageSource(index, true)
 				if (!element) {
-					throw new FatalError("No parsed source.");
+					throw new Error("No parsed source.");
 				}
 				this._progress++;
 				this.chapters[index] = this.findChapterData(index, element);
 			}, i);
 		}
 	}
+
 	
 	// Step 1
 	protected abstract findTitle(parsedSource: Cheerio.CheerioAPI): string;
@@ -91,7 +97,7 @@ export abstract class BaseSite {
 		const parsedSource = await this.getParsedPageSource(0, false);
 
 		if (!parsedSource) {
-			throw new FatalError("Couldn't fetch source pour title page.");
+			throw new Error("Couldn't fetch source pour title page.");
 		}
 
 		this.findTitle(parsedSource);
@@ -109,6 +115,10 @@ export abstract class BaseSite {
 
 	public addWarning(warnText: string) {
 		this._warnings.push(new Warning(warnText));
+	}
+
+	public addError(error: Error) {
+		this._errors.push(error);
 	}
 
 	// Getters
@@ -180,8 +190,12 @@ export abstract class BaseSite {
 		return this._progress;
 	}
 
-	get warnings() {
-		return this._warnings;
+	get warnings(): Warning[] {
+		return this._warnings.splice(0, this._warnings.length);
+	}
+
+	get errors(): Error[] {
+		return this._errors;
 	}
 
 	get chapters() {
@@ -191,6 +205,10 @@ export abstract class BaseSite {
 	getChapter(num: number) {
 		return this.chapters[num];
 	}
+
+	get queueMgr(): QueueMgr {
+		return this._queue;
+	} 
 
 	// Setters
 

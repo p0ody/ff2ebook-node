@@ -15,6 +15,7 @@ export default class {
 	private maxAsync: number;
 	private timeout: number;
 	private interval: number;
+
 	constructor(maxAsync: number = 100, timeoutMS:number = 0, interval:number = 1000) {
 		this.queue = [];
 		this.inProgress = [];
@@ -124,5 +125,10 @@ export default class {
 				inProgress.done = true;
 			}
 		}
+	}
+
+	public cancelAll() {
+		this.queue = [];
+		this.inProgress = [];
 	}
 }

@@ -3,22 +3,31 @@ import { BaseSite } from "./sites/BaseSite";
 import Config from "./_Config";
 import fs from "fs";
 const FileSystem = fs.promises;
-import { Warning, FatalError } from "./ErrorTypes";
 import * as Cheerio from "cheerio";
 import { UrlTypeRequired } from "./GlobalEnums";
-import { Log } from "./Utils";
 import { EOL } from "os";
 import * as Utils from "./Utils";
+import * as db from "./db/DBHandler";
 
 export async function create(fic: BaseSite) {
+	
 	const filename = `${fic.site}_${fic.id}_${fic.updatedDate}.epub`;
 	const tempFile = `${Config.App.ficTempDir}/${filename}`;
+
+	
 	await createOutputDir().catch((err) => {
-		throw new FatalError(err);
+		if (err instanceof Error) {
+			throw err;
+		}
+		
+		console.warn(err);
 	});
 
-	await copyTemplate(tempFile).catch(err => {
-		throw new FatalError(err);
+	await copyTemplate(tempFile).catch((err) => {
+		if (err instanceof Error) {
+			throw err;
+		}
+		console.warn(err);
 	});
 
 	const epub = new Zip(tempFile);
@@ -33,23 +42,16 @@ export async function create(fic: BaseSite) {
 
 		const archiveFile = `${Config.App.ficArchiveDir}/${filename}`;
 		if (fs.existsSync(archiveFile)) {
-			Log.info("File exist in archive, deleting");
+			console.info("File exist in archive, deleting");
 			fs.rmSync(archiveFile);
 		}
 		fs.cpSync(tempFile, archiveFile);
 		await FileSystem.rm(tempFile, { force: true });
 	}).catch(err => {
-		throw new FatalError(err);
+		throw new Error("Unknown error while creating eboook");
 	})
-	/* updateTitlePage(fic, epub).catch(err => {
-		throw new FatalError(err);
-	});
 
-	createChapters(fic, epub).catch(err => {
-		throw new FatalError(err);
-	}); */
-
-	
+	await addToDB(fic, filename);
 
 	return filename;
 }
@@ -57,12 +59,12 @@ export async function create(fic: BaseSite) {
 async function createOutputDir() {
 	if (!fs.existsSync(Config.App.ficArchiveDir)) {
 		await FileSystem.mkdir(Config.App.ficArchiveDir);
-		Log.debug("Created %s dir.", Config.App.ficArchiveDir);
+		console.debug("Created %s dir.", Config.App.ficArchiveDir);
 	}
 
 	if (!fs.existsSync(Config.App.ficTempDir)) {
 		await FileSystem.mkdir(Config.App.ficTempDir);
-		Log.debug("Created %s dir.", Config.App.ficTempDir);
+		console.debug("Created %s dir.", Config.App.ficTempDir);
 	}
 
 	if (!(fs.existsSync(Config.App.ficArchiveDir) && fs.existsSync(Config.App.ficTempDir))) {
@@ -72,7 +74,7 @@ async function createOutputDir() {
 
 async function copyTemplate(newFile: string) {
 	if (fs.existsSync(newFile)) { // If file already exist, delete
-		Log.debug("%s file exist, deleting...", newFile);
+		console.debug("%s file exist, deleting...", newFile);
 		await FileSystem.rm(newFile).catch((err) => {
 			throw new Error("Couldn't remove existing file.");
 		});
@@ -114,7 +116,7 @@ async function updateTitlePage(fic: BaseSite, epub: Zip): Promise<void> {
 	updateText($, "#chapCount", fic.chapCount);
 	$("#createdOn").text(dateFormat.format(Date.now()));
 
-	Log.debug("Saving title page...");
+	console.debug("Saving title page...");
 	epub.updateFile(titlePage, Buffer.from($.html()));
 }
 
@@ -142,7 +144,7 @@ async function createChapters(fic: BaseSite, epub: Zip): Promise<void> {
 		epub.addFile(`OEBPS/Content/chapter${i}.xhtml`, Buffer.from($.html()));
 	}
 
-	Log.debug("Saving chapter pages...");
+	console.debug("Saving chapter pages...");
 	epub.deleteFile(chapterPage);
 }
 
@@ -182,7 +184,7 @@ async function updateManifest(fic: BaseSite, epub: Zip) {
 
 	$("manifest").html(newManifest);
 	$("spine").html(spine);
-	Log.debug("Saving content.opf...");
+	console.debug("Saving content.opf...");
 	epub.updateFile(content, Buffer.from($.html()));
 }
 
@@ -211,7 +213,7 @@ async function updateTOC(fic: BaseSite, epub: Zip) {
 	}
 
 	$("navMap").html(newTOC);
-	Log.debug("Saving toc.ncx...");
+	console.debug("Saving toc.ncx...");
 	epub.updateFile(toc, Buffer.from($.html()));
 }
 
@@ -229,5 +231,20 @@ function updateText(parsedHtml: Cheerio.CheerioAPI, selector: string, value: any
 	element.text(element.text() + value);
 
 	return $;
+}
+
+async function addToDB(fic: BaseSite, filename: string) {
+	console.info("Addind fic to db.");
+	await db.models.FicArchive.create({
+		id: fic.id,
+		title: fic.title,
+		author: fic.authorName,
+		site: fic.site,
+		updated: fic.updatedDate,
+		lastChecked: Date.now()/1000,
+		filename: filename
+	} , { ignoreDuplicates: true } ).catch((err) => {
+		throw new Error("Error addind to databasse");
+	});
 }
 

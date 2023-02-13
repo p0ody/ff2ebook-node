@@ -1,9 +1,10 @@
 import Config from "./_Config";
-import Axios from "axios";
+import Axios, { AxiosResponse } from "axios";
 import Retry from "./Retry"
 import * as ScraperMgr from "./ScraperMgr";
 
-export async function useScraper(url: string, retry = Config.Scraper.maxRetry, scraper?: ScraperMgr.Scraper): Promise<string | null> {
+
+export async function useScraper(url: string, checkFunction?: (response: AxiosResponse) => boolean, retry = Config.Scraper.maxRetry, scraper?: ScraperMgr.Scraper): Promise<string | null> {
 	const useProvidedScraper = (scraper != null);
 	const res = await Retry(retry, async () => {
 		if (!useProvidedScraper) {
@@ -27,8 +28,15 @@ export async function useScraper(url: string, retry = Config.Scraper.maxRetry, s
 			return null;
 		}
 		scraper.isWorking = true;
+
+		if (checkFunction) {
+			if (!checkFunction(res)) {
+				return null;
+			}
+		}
+
 		return res;
-	});
+	}).catch((err) => { console.log(err) });
 	
 	return res.data;
 }

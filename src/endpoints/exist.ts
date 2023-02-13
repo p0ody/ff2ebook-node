@@ -1,33 +1,64 @@
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from "fastify";
 import * as db from "../db/DBHandler";
-import * as FanficSite from "../FanficSites";
 import * as Utils from "../Utils";
+import * as FanficSites from "../FanficSites";
+import { ErrorType, errorGenerator, FrontendError } from "../FrontendInterface";
 
 export interface Params {
 	site: string;
 	id: number;
 }
 
-export async function handler(request: FastifyRequest) {
-	const params = request.params as Params;
-
-	if (!Utils.enumContains(params.site, FanficSite.Sites)) {
-		return { error: "Invalid site." };
-	}
-
-	if (!params.id) {
-		return { error: "No id provided." };
-	}
-
-	
-	
-	return await ficExist(params);
+interface Response {
+	exist?: boolean,
+	site?: string
+	id?: number,
+	errors?: FrontendError[],
 }
 
-export async function postHandler(request: FastifyRequest) {
-	console.log("Received POST");
-	console.log(request.query);
-	return { test: "lol" };
+export async function handler(request: FastifyRequest): Promise<Response> {
+	const params = request.params as Params;
+
+	try {
+		if (!Utils.enumContains(params.site, FanficSites.Sites)) {
+			throw new Error("Invalid site.");
+		}
+	
+		if (!params.id) {
+			throw new Error("No id provided.");
+		}
+	} catch(err) {
+		if (err instanceof Error) {
+			return { 
+				errors: [errorGenerator(ErrorType.critical, err.message)] 
+			};
+		}
+	}
+	
+	const result = await ficExist(params);
+	return { 
+		exist: result != null,
+		site: params.site,
+		id: params.id };
+}
+
+interface ExistPostRequests {
+	url: string,
+}
+
+export async function postHandler(request: FastifyRequest): Promise<Response> {
+	try {
+		const data = request.body as ExistPostRequests;
+		request.params = FanficSites.parseUrl(data.url);
+		return handler(request)
+	} catch (err) {
+		if (err instanceof Error) {
+			return { 
+				errors: [errorGenerator(ErrorType.critical, err.message)] 
+			};
+		}
+		
+	}
 }
 
 export async function ficExist(params: Params) {
@@ -37,12 +68,15 @@ export async function ficExist(params: Params) {
 			id: params.id
 		},
 		attributes: [
+			"title",
+			"author",
 			"id",
 			"updated",
 			"lastChecked",
-		]
+			"filename",
+		],
+		order: [["updated", "DESC"]]
 	});
-
 	return result;
 }
 

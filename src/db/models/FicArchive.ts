@@ -31,7 +31,7 @@ export default class FicArchive extends Model<InferAttributes<FicArchive>, Infer
 			allowNull: true,
 		},
 		updated: {
-			type: DataTypes.INTEGER,
+			type: DataTypes.INTEGER.UNSIGNED,
 			allowNull: true,
 		},
 		filename: {

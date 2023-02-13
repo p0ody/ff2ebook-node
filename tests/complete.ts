@@ -11,16 +11,16 @@ import * as CreateEpub from "../src/endpoints/createEpub";
 
 const TEST_FIC = { 
 	site: "ffnet",
-	id: 14139690,
+	//id: 6256154, // 10 chapters
+	id: 13941037 // 1000+ chapters
 };
-
 
 try {
 	db.init().then(async () => {
 		console.log("Connected to DB.");
 
 		// Testing scrapers listed
-		await ScraperMgr.testScrapers();
+		//await ScraperMgr.testScrapers();
 
 		console.info("Testing /exist/ endpoint");
 		await Exist.ficExist(TEST_FIC).then((result) => {
@@ -31,8 +31,8 @@ try {
 		console.log("Fetching chapters...");
 		let uuid = null;
 		await Fetch.fetch(TEST_FIC).then(result => {
-			if (result.error) {
-				throw new Error(result.error);
+			if (result.errors?.length > 0) {
+				throw result.errors[0];
 			}
 
 			console.log("uuid: %s", result.uuid);
@@ -43,8 +43,8 @@ try {
 		let ready = false;
 		while (!ready) {
 			const prog = await Progress.progress(uuid);
-			if (prog.error) {
-				throw new Error(prog.error);
+			if (prog.errors?.length > 0) {
+				throw prog.errors[0];
 			}
 			ready = prog.ready;
 			const percent = Math.round((prog.done / prog.total) * 100);
@@ -56,8 +56,8 @@ try {
 
 		console.info("Testing /createEpub/ endpoints");
 		const epub = await CreateEpub.createEpub(uuid);
-		if (epub.error) {
-			throw new Error(epub.error);
+		if (epub.errors?.length > 0) {
+			throw epub.errors[0];
 		}
 		console.log(epub.filename);
 

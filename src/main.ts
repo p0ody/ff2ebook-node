@@ -3,6 +3,7 @@ import Config from "./_Config";
 import * as db from "./db/DBHandler";
 import * as ScraperMgr from "./ScraperMgr";
 import importEndpoints from "./endpoints/importEndpoints";
+import * as RequestMgr from "./RequestMgr";
 
 const server = Fastify({ logger: false, ignoreTrailingSlash: true });
 server.register(require("fastify-cors"), { 
@@ -26,6 +27,11 @@ try {
 			ScraperMgr.testScrapers();
 			
 		}, Config.Scraper.testIntervalSecs * 1000);
+
+		setInterval(() => {
+			RequestMgr.updateRequestList();
+			
+		}, (Config.App.clientTimeoutSec* 1000) /2 );
 		
 	})
 	.catch((err) => { throw err; });

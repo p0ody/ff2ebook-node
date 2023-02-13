@@ -4,7 +4,6 @@ import * as SourceFetcher from "./SourceFetcher"
 const TEST_URL = "https://www.fanfiction.net/s/6868583";
 
 let scraperList: Scraper[] = [];
-let lastScraper: Scraper;
 
 export async function testScrapers() {
 	let promises: Promise<any>[] = [];
@@ -32,9 +31,13 @@ export function getBestScraper(): Scraper {
 	return scraperList[0];
 }
 
+export function getScraperList() {
+	return scraperList;
+}
+
 function sortScraperList(): void {
 	scraperList.sort((a, b) => {
-		// If scraper is now working, put really low in the list
+		// If scraper is not working, put really low in the list
 		if (!a.isWorking) {
 			return 10;
 		}
@@ -65,6 +68,7 @@ export class Scraper {
 	private _ping: number = 10000;
 	private _isWorking: boolean;
 	private _queueLength: number = 0;
+	private _workingHistory: boolean[] = [];
 
 	constructor(url: string) {
 		if (!url) {
@@ -76,7 +80,7 @@ export class Scraper {
 	async test(): Promise<boolean> {
 		console.info("Testing scraper: %s", this.url);
 		const startTime = Date.now();
-		const res = await SourceFetcher.useScraper(TEST_URL, 3, this);
+		const res = await SourceFetcher.useScraper(TEST_URL, null, 3, this);
 		if (!res) {
 			console.info("FAILED %s", this.url);
 			this.isWorking = false;
@@ -84,12 +88,13 @@ export class Scraper {
 		}
 		const delay = Date.now() - startTime;
 		console.info("PASSED %s with %s ms delay.", this.url, delay);
-		this._ping = delay;
+		this.ping = delay;
 		return true;
 	}
 
 	set isWorking(work: boolean) {
 		this._isWorking = work;
+		this._workingHistory.push(work);
 	}
 
 	get url(): string {
@@ -106,6 +111,17 @@ export class Scraper {
 	
 	get isWorking(): boolean {
 		return this._isWorking;
+	}
+
+	/** Use working history to determine if it is working most of the time */
+	get isMostlyWorking(): boolean {
+		let working = 0;
+		for (const data of this._workingHistory) {
+			working += data ? 1 : 0;
+		}
+
+		const avg = working/this._workingHistory.length;
+		return Math.round(avg) > 0 ? true : false;
 	}
 
 	get queueLength(): number {

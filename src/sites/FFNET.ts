@@ -1,16 +1,14 @@
-import { BaseSite} from "./BaseSite";
+import { BaseSite } from "./BaseSite";
 import { UrlTypeRequired } from "../GlobalEnums";
 import * as SourceFetcher from "../SourceFetcher";
 import * as Cheerio from "cheerio";
-import { Warning, FatalError } from "../ErrorTypes";
 import Chapter from "../Chapter";
 import * as FanficSite from "../FanficSites";
 
 export default class extends BaseSite {
 	_site = FanficSite.Sites.FFNET;
 	_baseUrl = "https://www."+ this.domain;
-
-
+	
 	getUrl(urlRequired?: UrlTypeRequired, chapNum: number = 1): string {
 		switch(urlRequired) {
 			case UrlTypeRequired.titlePage:
@@ -42,10 +40,24 @@ export default class extends BaseSite {
 		if (lightVersion) {
 			url = url.replace("www", "m");
 		}
-		const source = await SourceFetcher.useScraper(url);
+		const source = await SourceFetcher.useScraper(url , (response) => {
+			if (chapNum < 1) {
+				return true;
+			}
+			try {
+				this.chapterSource[chapNum] = response.data;
+				this.parsedSource[chapNum] = Cheerio.load(response.data);
+				this.findChapterData(chapNum, this.parsedSource[chapNum]);
+				// Check if an error happen when trying to find chapter data.
+			} catch (err) {
+				console.log("Error in checking chapter data: %s", err);
+				return false;
+			}
+			return true;
+		});
 
 		if (!source) {
-			throw new FatalError("Couldn't fetch source.");
+			throw new Error("Couldn't fetch source.");
 		}
 
 		this.chapterSource[chapNum] = source;
@@ -56,7 +68,7 @@ export default class extends BaseSite {
 	protected findTitle(parsedSource: Cheerio.CheerioAPI): string {
 		const title = parsedSource("b.xcontrast_txt");
 		if (title.length === 0) {
-			throw new FatalError("Couldn't find title.");
+			throw new Error("Couldn't find title.");
 		}
 
 		this.title = title.text();
@@ -66,7 +78,7 @@ export default class extends BaseSite {
 	protected findAuthor(parsedSource: Cheerio.CheerioAPI): { authorName: string, authorId: number } {
 		const author = parsedSource("#profile_top > a[href*=/u/]");
 		if (author.length === 0) {
-			throw new FatalError("Couldn't find author information");
+			throw new Error("Couldn't find author information");
 		}
 
 
@@ -101,7 +113,7 @@ export default class extends BaseSite {
 		//const updated = parsedSource.querySelector("#profile_top > div.xcontrast_txt");
 
 		if (selected.length === 0) {
-			throw new FatalError("Couldn't find published date.");
+			throw new Error("Couldn't find published date.");
 		}
 
 		// if more than on element is found.
@@ -180,7 +192,7 @@ export default class extends BaseSite {
 		const titleElement = parsedSource("#content");
 
 		if (titleElement.length === 0) {
-			throw new FatalError(`Couldn't find chapter #${chapNum} data.`);
+			throw new Error(`Couldn't find chapter #${chapNum} data.`);
 		}
 
 		const titleRegex = /Chapter [0-9]+(?:\: )*(.*)/si

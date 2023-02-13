@@ -5,6 +5,7 @@ import Crypto from "crypto";
 import * as FanficSite from "./FanficSites";
 
 
+
 export default class FanficHandler {
 	private _site: FanficSite.Sites;
 	private _id: number;
