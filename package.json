@@ -1,24 +1,24 @@
 {
-  "name": "ff2ebook-cloudflare-scraper",
+  "name": "ff2ebook-node",
   "version": "1.0.0",
-  "description": "App used by ff2ebook.com for scraping website protected by Cloudflare",
-  "main": "dist/src/index.js",
+  "description": "",
+  "main": "dist/src/app.js",
   "scripts": {
-    "start": "node dist/src/main.js",
-    "dev": "nodemon -w *.ts src/main.ts",
+    "start": "node dist/src/app.js",
+    "dev": "nodemon -w *.ts src/app.ts",
     "test": "ts-node ./tests/complete.ts",
-    "build": "./node_modules/.bin/tsc"
+    "build": "npx tsc"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/p0ody/ff2ebook-cloudflare-scraper.git"
+    "url": "git+https://github.com/p0ody/ff2ebook-node.git"
   },
   "author": "p0ody",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/p0ody/ff2ebook-cloudflare-scraper/issues"
+    "url": "https://github.com/p0ody/ff2ebook-node/issues"
   },
-  "homepage": "https://github.com/p0ody/ff2ebook-cloudflare-scraper#readme",
+  "homepage": "https://github.com/p0ody/ff2ebook-node#readme",
   "devDependencies": {
     "@types/adm-zip": "^0.5.0",
     "@types/extract-domain": "^2.3.1",
