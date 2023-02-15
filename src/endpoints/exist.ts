@@ -3,6 +3,9 @@ import * as db from "../db/DBHandler";
 import * as Utils from "../Utils";
 import * as FanficSites from "../FanficSites";
 import { ErrorType, errorGenerator, FrontendError } from "../FrontendInterface";
+import FanficHandler from "../FanficHandler";
+import Config from "../_Config";
+import * as TC from "../TimeConversion";
 
 export interface Params {
 	site: string;
@@ -34,12 +37,22 @@ export async function handler(request: FastifyRequest): Promise<Response> {
 			};
 		}
 	}
-	
+
 	const result = await ficExist(params);
+	let exist = result != null;
+
+	// if the fic exist in DB, Check if the difference between the last time it was checked and now is over maxArchiveAgeHours, if if is, consider the cached version not up to date.
+	if (exist && (Date.now()/TC.SECS_TO_MS) - result.lastChecked > Config.App.maxArchiveAgeHours*TC.HOURS_TO_SECS) {
+		// Check if update date from ff site is greater than what we have cached, if so, request an update.
+		const updatedDate = await getUpdatedDate(params.site as FanficSites.Sites, params.id);
+		exist = updatedDate >= result.updated;
+	}
+
 	return { 
-		exist: result != null,
+		exist: exist,
 		site: params.site,
-		id: params.id };
+		id: params.id 
+	};
 }
 
 interface ExistPostRequests {
@@ -77,7 +90,15 @@ export async function ficExist(params: Params) {
 		],
 		order: [["updated", "DESC"]]
 	});
+
+	db.models.FicArchive.update({ lastChecked: Date.now()/TC.SECS_TO_MS }, { where: { id: params.id, site: params.site }});
 	return result;
+}
+
+async function getUpdatedDate(site: FanficSites.Sites, id: number) {
+	const handler = new FanficHandler(site, id);
+	await handler.fetchFicInfos();
+	return handler.siteHandler.updatedDate;
 }
 
 export default function (router:FastifyInstance, opts: any, next: Function) {

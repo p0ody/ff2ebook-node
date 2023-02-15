@@ -2,6 +2,7 @@ import Config from "./_Config";
 import Axios, { AxiosResponse } from "axios";
 import Retry from "./Retry"
 import * as ScraperMgr from "./ScraperMgr";
+import * as TC from "./TimeConversion";
 
 
 export async function useScraper(url: string, checkFunction?: (response: AxiosResponse) => boolean, retry = Config.Scraper.maxRetry, scraper?: ScraperMgr.Scraper): Promise<string | null> {
@@ -15,7 +16,7 @@ export async function useScraper(url: string, checkFunction?: (response: AxiosRe
 		const getUrl = `${scraper.url}/?url=${url}`;
 		let timer = Date.now();
 		scraper.queueLength = scraper.queueLength + 1; // Adding 1 to queue instead of relying on the endpoint request because at the start it just sent evenrything to the same scraper
-		const res = await Axios.get(getUrl, { timeout: Config.Scraper.timeoutMS }).catch((err) => {
+		const res = await Axios.get(getUrl, { timeout: Config.Scraper.timeoutSec * TC.SECS_TO_MS }).catch((err) => {
 			console.error("Axios Error : %s on url: %s", err.code, getUrl);
 			scraper.isWorking = false;
 		});	

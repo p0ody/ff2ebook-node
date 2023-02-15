@@ -33,7 +33,11 @@ export default class FanficHandler {
 	} 
 
 	async fetchFic() {
-		this.siteHandler.populateData();
+		await this.siteHandler.populateData();
+	}
+
+	async fetchFicInfos() {
+		await this.siteHandler.populateData(true);
 	}
 
 	get site() {

@@ -10,7 +10,6 @@ export async function handler(request: FastifyRequest): Promise<Response> {
     const list = ScraperMgr.getScraperList();
     for (const scraper of list) {
         scraperStatus.push(scraper.isMostlyWorking);
-        console.log("ip: %s, working: %s", scraper.url, scraper.isMostlyWorking);
     }
 
     return { scrapers: scraperStatus };

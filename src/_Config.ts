@@ -1,10 +1,12 @@
+import * as TimeConversion from "./TimeConversion";
+
 export default {
 	App: {
 		listenPort: 3500,
 		ficArchiveDir: "./archive",
 		ficTempDir: "./archive/temp",
-		showDebugLog: true,
 		clientTimeoutSec: 5, // Maximum amout of time in seconds between to progress request before cancelling the job.
+		maxArchiveAgeHours: 24,
 	},
 	DB: {
 		host: "",
@@ -18,7 +20,7 @@ export default {
 			"",
 		],
 		maxRetry: 3,
-		timeoutMS: 30000,
+		timeoutSec: 30,
 		maxAsync: 10,
 		testIntervalSecs: 35,
 	},

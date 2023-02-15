@@ -6,6 +6,7 @@ import QueueMgr from "../QueueMgr";
 import * as FanficSite from "../FanficSites";
 import Config from "../_Config";
 import Warning from "../Warning"
+import * as TC from "../TimeConversion";
 
 export abstract class BaseSite {
 	protected _baseUrl: string
@@ -36,7 +37,7 @@ export abstract class BaseSite {
 	constructor(handler: FanficHandler) {
 		this._id = handler.id;
 		this._uuid = handler.UUID;
-		this._queue = new QueueMgr(Config.Scraper.maxAsync, (Config.Scraper.timeoutMS * Config.Scraper.maxRetry)*1.5, 300);
+		this._queue = new QueueMgr(Config.Scraper.maxAsync, ((Config.Scraper.timeoutSec*TC.SECS_TO_MS) * Config.Scraper.maxRetry)*1.5, 300);
 	}
 
 	public abstract getUrl(urlRequired?: UrlTypeRequired, chapNum?: number): string;
@@ -93,7 +94,7 @@ export abstract class BaseSite {
 	// Step 2
 	protected abstract findChapterData(chapNum: number, parsedSource: Cheerio.CheerioAPI): Chapter;
 
-	public async populateData(): Promise<void> {
+	public async populateData(infosOnly: boolean = false): Promise<void> {
 		const parsedSource = await this.getParsedPageSource(0, false);
 
 		if (!parsedSource) {
@@ -109,6 +110,10 @@ export abstract class BaseSite {
 		this.findChapCount(parsedSource);
 		this.findIsCompleted(parsedSource);
 		this.findAddInfos(parsedSource);
+
+		if (infosOnly) {
+			return;
+		}
 
 		this.getChapters();
 	}

@@ -48,7 +48,8 @@ export async function create(fic: BaseSite) {
 		fs.cpSync(tempFile, archiveFile);
 		await FileSystem.rm(tempFile, { force: true });
 	}).catch(err => {
-		throw new Error("Unknown error while creating eboook");
+		throw err;
+		//throw new Error("Unknown error while creating eboook");
 	})
 
 	await addToDB(fic, filename);
